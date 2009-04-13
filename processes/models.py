@@ -2,8 +2,10 @@ import subprocess
 import datetime
 
 from django.db import models
+from django.utils.encoding import smart_str, smart_unicode
 
 from processes.fields import UUIDField
+from processes.exceptions import ProcessError
 
 try:
     import threading
@@ -26,8 +28,19 @@ class Process(models.Model, threading.Thread):
     created = models.DateTimeField(editable=False)
     modified = models.DateTimeField(editable=False)
 
+    class Meta:
+        abstract = True
+
+    def __str__(self):
+        return smart_str(self.uuid)
+
+    def __unicode__(self):
+        return smart_unicode(self.uuid)
+
     def __init__(self, *args, **kwargs):
         models.Model.__init__(self, *args, **kwargs)
+        # Clearly order is important here as we do not have self.uuid until the
+        # Model's __init__() has been run.
         threading.Thread.__init__(self, name=self.uuid)
 
     def save(self, *args, **kwargs):
@@ -47,10 +60,11 @@ class Process(models.Model, threading.Thread):
             self.teardown()
         except ProcessError, e:
             self.error = True
-            self.error_message = e.msg
+            self.error_msg = e.msg
         else:
-            self.processing = False
             self.completed = True
+        finally:
+            self.processing = False
             self.save()
 
     def setup(self):
@@ -61,3 +75,4 @@ class Process(models.Model, threading.Thread):
 
     def run_process(self):
         raise NotImplementedError("You must override this function in order for your process to run.")
+
