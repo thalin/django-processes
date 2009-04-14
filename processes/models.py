@@ -65,7 +65,7 @@ class Process(models.Model, threading.Thread):
             self.error = True
             self.error_msg = e.msg
             if e.debug:
-                self.debug = debug
+                self.debug_msg = e.debug
             self.logger.error(self.error_msg)
         else:
             self.completed = True
