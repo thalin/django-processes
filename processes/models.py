@@ -25,6 +25,7 @@ class Process(models.Model, threading.Thread):
     completed = models.BooleanField(editable=False, default=False)
     error = models.BooleanField(editable=False, default=False)
     error_msg = models.TextField(editable=False, blank=True)
+    debug_msg = models.TextField(editable=False, blank=True)
     created = models.DateTimeField(editable=False)
     modified = models.DateTimeField(editable=False)
 
@@ -60,22 +61,35 @@ class Process(models.Model, threading.Thread):
         try:
             self.setup()
             self.run_process()
-            self.teardown()
         except ProcessError, e:
             self.error = True
             self.error_msg = e.msg
+            if e.debug:
+                self.debug = debug
+            self.logger.error(self.error_msg)
         else:
             self.completed = True
         finally:
+            self.teardown()
             self.processing = False
             self.save()
 
     def setup(self):
+        '''
+        Set up the environment.
+        '''
         pass
 
     def teardown(self):
+        '''
+        Tear down the environment.
+        This method should never produce an error.
+        '''
         pass
 
     def run_process(self):
+        '''
+        Run the process.  This method must be overridden.
+        '''
         raise NotImplementedError("You must override this function in order for your process to run.")
 
