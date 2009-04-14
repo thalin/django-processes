@@ -51,6 +51,9 @@ class Process(models.Model, threading.Thread):
             self.modified = datetime.datetime.now()
         models.Model.save(self, *args, **kwargs)
 
+    def set_logger(self, logger):
+        self.logger = logger
+
     def run(self):
         self.processing = True
         self.save()
