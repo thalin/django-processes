@@ -43,7 +43,7 @@ class UUIDField(models.CharField):
         return getattr(uuid, 'uuid%s' % (self.version,))(*args)
  
     def db_type(self):
-        return 'char(%s)' % (kwargs['max_length'])
+        return 'char(32)'
  
     def pre_save(self, model_instance, add):
         """ see CharField.pre_save
