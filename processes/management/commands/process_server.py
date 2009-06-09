@@ -117,7 +117,7 @@ class Command(BaseCommand):
                     if len(processes) > 0:
                         self.logger.debug("Starting new processes.")
                         for process in processes[:to_run]: # Start new processes
-                            process.set_logger(self.logger)
+                            process.setLogger(self.logger)
                             process.start()
                 sleep(self.wait_time)
         except KeyboardInterrupt:

@@ -1,4 +1,3 @@
-import subprocess
 import datetime
 
 from django.db import models
@@ -11,6 +10,44 @@ try:
     import threading
 except ImportError:
     import dummy_threading as threading
+
+class ProcessManager(models.Manager):
+    """
+    ProcessManager for Process objects.
+    Implements the following additional manager methods:
+
+    processing() - filters for objects with the processing flag
+
+    complete() - filters for objects which have completed processing
+
+    error() - filters for objects which have had an error
+
+    to_run() - filters for objects which do not have processing, complete, or
+        error flags, sorted by date created.
+
+    has_run() - filters for objects which have processing, complete, or
+        error flags.
+    """
+
+    def processing(self):
+        return self.filter(processing=True)
+
+    def complete(self):
+        return self.filter(completed=True)
+
+    def error(self):
+        return self.filter(error=True)
+
+    def to_run(self):
+        qs = self.filter(processing=False,completed=False,error=False)
+        return qs.order_by('created')
+
+    def has_run(self):
+        myQ = models.Q(processing=True)
+        myQ = myQ|models.Q(completed=True)
+        myQ = myQ|models.Q(error=True)
+        return self.filter(myQ)
+
 
 class Process(models.Model, threading.Thread):
     '''
@@ -28,6 +65,8 @@ class Process(models.Model, threading.Thread):
     debug_msg = models.TextField(editable=False, blank=True)
     created = models.DateTimeField(editable=False)
     modified = models.DateTimeField(editable=False)
+
+    objects = ProcessManager()
 
     class Meta:
         abstract = True
@@ -52,7 +91,7 @@ class Process(models.Model, threading.Thread):
             self.modified = datetime.datetime.now()
         models.Model.save(self, *args, **kwargs)
 
-    def set_logger(self, logger):
+    def setLogger(self, logger):
         self.logger = logger
 
     def run(self):
@@ -83,7 +122,6 @@ class Process(models.Model, threading.Thread):
     def teardown(self):
         '''
         Tear down the environment.
-        This method should never produce an error.
         '''
         pass
 
