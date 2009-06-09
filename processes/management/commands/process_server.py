@@ -112,7 +112,7 @@ class Command(BaseCommand):
                     self.logger.debug("Finding new processes.")
                     processes = []
                     for pclass in subclasses: # Build process queue
-                        processes.extend([procs for procs in pclass.objects.filter(completed=False,processing=False,error=False)])
+                        processes.extend([procs for procs in pclass.objects.to_run()])
                     processes.sort(cmp=ProcessSort) # Sort by created date
                     if len(processes) > 0:
                         self.logger.debug("Starting new processes.")
