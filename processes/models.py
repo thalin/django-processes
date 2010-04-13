@@ -8,6 +8,7 @@ from django.utils.encoding import smart_str, smart_unicode
 
 from processes.fields import UUIDField
 from processes.exceptions import ProcessError
+from processes.signals import process_finished
 
 try:
     import threading
@@ -15,41 +16,37 @@ except ImportError:
     import dummy_threading as threading
 
 class ProcessManager(models.Manager):
-    '''
+    """
     ProcessManager for Process objects.
-    '''
+    Implements the following additional manager methods:
+
+    processing() - filters for objects with the processing flag
+
+    complete() - filters for objects which have completed processing
+
+    error() - filters for objects which have had an error
+
+    to_run() - filters for objects which do not have processing, complete, or
+        error flags, sorted by date created.
+
+    has_run() - filters for objects which have processing, complete, or
+        error flags.
+    """
 
     def processing(self):
-        '''
-        Filters for objects with the processing flag set to True.
-        '''
         return self.filter(processing=True)
 
     def complete(self):
-        '''
-        Filters for objects with the completed flag set to True.
-        '''
         return self.filter(completed=True)
 
     def error(self):
-        '''
-        Filters for objects with the error flag set to True.
-        '''
         return self.filter(error=True)
 
     def to_run(self):
-        '''
-        Filters for objects which do not have processing, completed, or error
-        flags set to True, and orders by created date.
-        '''
         qs = self.filter(processing=False,completed=False,error=False)
         return qs.order_by('created')
 
     def has_run(self):
-        '''
-        Filters for objects which have any of the processing, completed, or
-        error flags set to True.
-        '''
         myQ = models.Q(processing=True)
         myQ = myQ|models.Q(completed=True)
         myQ = myQ|models.Q(error=True)
@@ -86,7 +83,7 @@ class Process(models.Model, threading.Thread):
 
     def __init__(self, *args, **kwargs):
         '''
-        Initialize both Model and Thread superclasses in the correct order.
+        __init__ overridden to call __init__ from both parent classes.
         '''
         models.Model.__init__(self, *args, **kwargs)
         # Clearly order is important here as we do not have self.uuid until the
@@ -95,7 +92,7 @@ class Process(models.Model, threading.Thread):
 
     def save(self, *args, **kwargs):
         '''
-        Save method overridden to add created and modified times.
+        Save overridden to set created and modified times.
         '''
         if not self.id:
             self.created = datetime.datetime.now()
@@ -105,63 +102,64 @@ class Process(models.Model, threading.Thread):
         models.Model.save(self, *args, **kwargs)
 
     def setLogger(self, logger):
+        '''
+        This function sets the logger for the Process model.  Calling this
+        function is required to get the Process.run() function to run correctly,
+        as errors are logged using self.logger.
+        '''
         self.logger = logger
 
     def run(self):
         '''
-        Run the process.  This function first sets self.processing to be True
-        so we can see which processes are running by querying the database,
-        then attempts to run the setup, run_process, and teardown methods.
-
-        If there are any ProcessErrors thrown, the error flag is set and the
-        error_msg attribute is set to the ProcessError msg attribute.  If a 
-        debug attribute is included in the ProcessError, then the debug_msg
-        attribute is set to the included debug message, otherwise a stack
-        trace is produced and saved to debug_msg.
-
-        If any other errors occur, the error_msg attribute is set to 'Unknown
-        Error!' and a stack trace is produced and saved to the debug_msg
-        attribute.
-
-        In either case, both error_msg and debug_msg are logged.
-
-        If no exceptions are encountered, the completed flag is set to true.
-
-        Once all of these conditions have been evaluated, the processing flag
-        is reset to False, and the object is saved again.
+        This function is the main execution function for the Process model.
+        It sets several flags, attempts to run the three defined methods,
+        and then handles any errors that result.
         '''
         self.processing = True
         self.save()
         try:
+            # Run process functions.
             self.setup()
             self.run_process()
             self.teardown()
         except ProcessError, e:
+            # Check for known errors.
+            tb = StringIO()
+            traceback.print_exc(file=tb)
+            tb.seek(0)
             self.error = True
             self.error_msg = e.msg
             if e.debug:
-                self.debug_msg = e.debug
+                self.debug_msg = "%s\n%s\n%s" % (e.debug, '-'*80, tb.read())
             else:
-                s = StringIO()
-                traceback.print_exc(file=s)
-                s.seek(0)
-                self.debug_msg = s.read()
-            self.logger.error("error_msg: %s" % self.error_msg)
-            self.logger.error("debug_msg: %s" % self.debug_msg)
+                self.debug_msg = '%s' % tb.read()
         except:
+            # Handle unknown errors.
+            tb = StringIO()
+            traceback.print_exc(file=tb)
+            tb.seek(0)
             self.error = True
-            self.error_msg = "Unknown error!"
-            s = StringIO()
-            traceback.print_exc(file=s)
-            s.seek(0)
-            self.debug_msg = s.read()
-            self.logger.error("error_msg: %s" % self.error_msg)
-            self.logger.error("debug_msg: %s" % self.debug_msg)
+            self.error_msg = 'An unknown error occured.  An email containing detailed debug information has been sent to the site administrators for analysis.'
+            self.debug_msg = tb.read()
         else:
+            # Handle no errors.
             self.completed = True
         finally:
+            # Finish up.
             self.processing = False
             self.save()
+            # Log errors.
+            if self.error:
+                self.logger.debug(dir(self))
+                err_msg = '(%s) Process had an error: %s' % (self.getName(),
+                            self.error_msg)
+                self.logger.error(err_msg)
+                if self.debug_msg:
+                    dbg_msg = '(%s) Debug info: %s' % (self.getName(), 
+                                self.debug_msg)
+                    self.logger.error(dbg_msg)
+            # Send process_finished signal.
+            process_finished.send(sender=self)
 
     def setup(self):
         '''
