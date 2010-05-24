@@ -17,7 +17,7 @@ from processes.exceptions import ProcessError
 PROCESS_RESULTS_OPTIONS = {
     'logname'       : None,
     'logfile'       : None,
-    'maxprocesses'  : 2,
+    'maxprocesses'  : 1,
     'waittime'      : 20,
     'pidfile'       : None,
 }
@@ -63,16 +63,16 @@ class Command(BaseCommand):
             options[k.lower()] = v
 
         # Set up our logger
-        if options['logname'] is not None:
-            self.logger = logging.getLogger(options['logname'])
-        elif hasattr(settings, "LOG_NAME"):
+        if hasattr(settings, "LOG_NAME"):
             self.logger = logging.getLogger(settings.LOG_NAME)
+        elif options['logname'] is not None:
+            self.logger = logging.getLogger(options['logname'])
         else:
             self.logger = logging.getLogger()
-        if options['logfile'] is not None:
-            ch = logging.FileHandler(options['logfile'])
-        elif hasattr(settings, "LOG_FILENAME"):
-            ch = logging.FileHandler(settings.LOG_FILENAME)
+        if hasattr(settings, "LOG_FILENAME"):
+            ch = logging.handlers.RotatingFileHandler(settings.LOG_FILENAME, maxBytes=512000, backupCount=5)
+        elif options['logfile'] is not None:
+            ch = logging.handlers.RotatingFileHandler(options['logfile'], maxBytes=512000, backupCount=5)
         else:
             ch = logging.StreamHandler()
         if settings.DEBUG:
@@ -89,9 +89,9 @@ class Command(BaseCommand):
             pidfile = open(options['pidfile'], 'w')
             pidfile.write("%d\n" % getpid())
             pidfile.close()
-        self.max_processes = getattr(settings, "MAX_PROCESSES", 4) # default to 2
+        self.max_processes = getattr(settings, "MAX_PROCESSES", 1) # default to 1
         self.wait_time = getattr(settings, "PROCESS_WAIT_TIME", 20) # default to 20 seconds
-        self.logger.debug("max_processes: %d" % self.max_processes)
+        self.logger.info("max_processes: %d" % self.max_processes)
 
     def handle(self, *args, **kwargs):
         '''
