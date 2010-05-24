@@ -5,6 +5,7 @@ import logging
 from time import sleep
 from sys import exit
 from os import getpid
+from logging.handlers import RotatingFileHandler
 
 # 3rd party module partial imports
 from django.core.management.base import BaseCommand
@@ -70,9 +71,9 @@ class Command(BaseCommand):
         else:
             self.logger = logging.getLogger()
         if hasattr(settings, "LOG_FILENAME"):
-            ch = logging.handlers.RotatingFileHandler(settings.LOG_FILENAME, maxBytes=512000, backupCount=5)
+            ch = RotatingFileHandler(settings.LOG_FILENAME, maxBytes=512000, backupCount=5)
         elif options['logfile'] is not None:
-            ch = logging.handlers.RotatingFileHandler(options['logfile'], maxBytes=512000, backupCount=5)
+            ch = RotatingFileHandler(options['logfile'], maxBytes=512000, backupCount=5)
         else:
             ch = logging.StreamHandler()
         if settings.DEBUG:
